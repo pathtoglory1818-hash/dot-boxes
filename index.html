@@ -213,10 +213,12 @@
         // Immersive Env Variables
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'dots-boxes-multi';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            // Provide dummy config strictly to prevent crash if run outside immersive, 
-            // though it won't connect without valid credentials.
-            projectId: "dummy-project",
-            apiKey: "dummy-key"
+            apiKey: "AIzaSyBvl_LEQ6KOmSRAlBHqrS2qcgBj-wNbn9A",
+            authDomain: "games-431e4.firebaseapp.com",
+            projectId: "games-431e4",
+            storageBucket: "games-431e4.firebasestorage.app",
+            messagingSenderId: "136365612708",
+            appId: "1:136365612708:web:4963da9871b9cd52359031"
         };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
