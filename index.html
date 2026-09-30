@@ -339,7 +339,16 @@
                 showScreen('main-menu');
             } catch (error) {
                 console.error("Auth Error:", error);
-                document.querySelector('#loading-screen p').innerText = "Connection Failed.";
+                
+                const loadingText = document.querySelector('#loading-screen p');
+                loadingText.classList.remove('animate-pulse', 'text-slate-400');
+                loadingText.classList.add('text-rose-400', 'text-center', 'px-4');
+                
+                if (error.code === 'auth/operation-not-allowed') {
+                    loadingText.innerHTML = "Connection Failed.<br><br><span class='text-xs font-normal'>You need to enable the <b>Anonymous</b> provider in your Firebase Authentication settings.</span>";
+                } else {
+                    loadingText.innerText = "Connection Failed: " + error.message;
+                }
             }
         }
 
