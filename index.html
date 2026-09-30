@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dots & Boxes Multiplayer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc; /* Slate 50 */
+            overscroll-behavior: none;
+        }
+        canvas {
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: #06b6d4;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Alert Modal -->
+    <div id="alert-modal" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center z-[200] opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-slate-800 border border-slate-700 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center flex flex-col gap-4 transform scale-95 transition-transform duration-300" id="alert-box">
+            <h3 id="alert-title" class="text-xl font-bold text-white"></h3>
+            <p id="alert-message" class="text-slate-400 text-sm"></p>
+            <button onclick="closeAlert()" class="mt-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold text-white transition-colors">OK</button>
+        </div>
+    </div>
+
+    <!-- Turn Popup Toast -->
+    <div id="turn-popup" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-900/95 backdrop-blur-md border-2 border-slate-600 px-8 py-5 rounded-3xl shadow-2xl z-[100] pointer-events-none opacity-0 scale-90 transition-all duration-300 flex flex-col items-center justify-center gap-1">
+        <span class="text-slate-400 text-xs font-semibold tracking-widest uppercase">Current Turn</span>
+        <span id="turn-popup-text" class="text-3xl font-black uppercase tracking-widest drop-shadow-md text-center"></span>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-[150] transition-opacity duration-500">
+        <div class="spinner mb-4"></div>
+        <p class="text-slate-400 font-medium tracking-widest uppercase text-sm animate-pulse">Connecting...</p>
+    </div>
+
+    <!-- Main Menu Overlay -->
+    <div id="main-menu" class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-[50] transition-opacity duration-500 p-4 opacity-0 pointer-events-none">
+        <div class="w-full max-w-sm flex flex-col gap-6">
+            <div class="text-center mb-4">
+                <h1 class="text-5xl font-extrabold tracking-tight mb-2">
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Dots</span>
+                    <span class="text-slate-400 font-medium text-3xl mx-1">&</span>
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-pink-500">Boxes</span>
+                </h1>
+                <p class="text-slate-400 text-sm font-semibold tracking-widest uppercase">Online Multiplayer</p>
+            </div>
+
+            <!-- Profile Name -->
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">Your Name</label>
+                <input type="text" id="local-player-name" placeholder="Enter your name" maxLength="12" class="w-full bg-slate-800 border border-slate-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all font-medium text-center text-lg">
+            </div>
+
+            <div class="flex flex-col gap-4 mt-2">
+                <button onclick="showScreen('create-game-menu')" class="w-full px-6 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95 text-lg">
+                    Create New Game
+                </button>
+                <button onclick="showScreen('join-game-menu')" class="w-full px-6 py-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95 text-lg">
+                    Join Existing Game
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Game Menu -->
+    <div id="create-game-menu" class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-[60] transition-opacity duration-500 p-4 opacity-0 pointer-events-none">
+        <div class="bg-slate-800 border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-sm flex flex-col gap-6">
+            <h2 class="text-2xl font-extrabold text-white text-center">Create Game</h2>
+            
+            <div class="flex flex-col gap-4">
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">Grid Size</label>
+                    <select id="create-grid-size" class="w-full bg-slate-900 border border-slate-600 text-white rounded-xl px-4 py-3 focus:outline-none">
+                        <option value="3">Small (3x3)</option>
+                        <option value="5" selected>Medium (5x5)</option>
+                        <option value="7">Large (7x7)</option>
+                        <option value="9">Huge (9x9)</option>
+                    </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">Max Players</label>
+                    <select id="create-max-players" class="w-full bg-slate-900 border border-slate-600 text-white rounded-xl px-4 py-3 focus:outline-none">
+                        <option value="2" selected>2 Players</option>
+                        <option value="3">3 Players</option>
+                        <option value="4">4 Players</option>
+                        <option value="5">5 Players</option>
+                        <option value="6">6 Players</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex gap-3 mt-2">
+                <button onclick="showScreen('main-menu')" class="flex-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold text-white transition-all">Back</button>
+                <button onclick="createRoom()" class="flex-[2] py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-white transition-all shadow-lg">Create Room</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Game Menu -->
+    <div id="join-game-menu" class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-[60] transition-opacity duration-500 p-4 opacity-0 pointer-events-none">
+        <div class="bg-slate-800 border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-sm flex flex-col gap-6">
+            <h2 class="text-2xl font-extrabold text-white text-center">Join Game</h2>
+            
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">Room Code</label>
+                <input type="text" id="join-room-code" placeholder="e.g. A1B2C3" maxLength="6" class="w-full bg-slate-900 border border-slate-600 text-white rounded-xl px-4 py-4 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all font-bold text-center text-2xl tracking-widest uppercase">
+            </div>
+
+            <div class="flex gap-3 mt-2">
+                <button onclick="showScreen('main-menu')" class="flex-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold text-white transition-all">Back</button>
+                <button onclick="joinRoom()" id="join-btn" class="flex-[2] py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-white transition-all shadow-lg flex justify-center items-center">Join Room</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lobby Menu -->
+    <div id="lobby-menu" class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-[60] transition-opacity duration-500 p-4 opacity-0 pointer-events-none">
+        <div class="bg-slate-800 border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-sm flex flex-col gap-6">
+            
+            <div class="text-center">
+                <p class="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">Room Code</p>
+                <div class="flex items-center justify-center gap-3">
+                    <h2 id="lobby-room-code" class="text-4xl font-black text-white tracking-widest">------</h2>
+                    <button onclick="copyRoomCode()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors" title="Copy Room Code">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="bg-slate-900 rounded-xl p-4 border border-slate-700">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-bold text-slate-300 uppercase">Players</h3>
+                    <span id="lobby-player-count" class="text-xs font-bold px-2 py-1 bg-slate-700 rounded-md">1/2</span>
+                </div>
+                <div id="lobby-players-list" class="flex flex-col gap-2 min-h-[100px]">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+
+            <div id="lobby-host-controls" class="hidden flex-col gap-3">
+                <button onclick="startGame()" class="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95 text-lg">
+                    Start Game
+                </button>
+            </div>
+            <div id="lobby-guest-message" class="text-center text-slate-400 text-sm font-medium hidden">
+                Waiting for host to start the game...
+            </div>
+            
+            <button onclick="leaveRoom()" class="mt-2 py-2 text-slate-400 hover:text-white transition-colors text-sm font-medium">Leave Room</button>
+        </div>
+    </div>
+
+    <div id="game-container" class="w-full max-w-lg flex flex-col gap-4 opacity-0 pointer-events-none transition-opacity duration-500 absolute">
+        
+        <!-- Scoreboard -->
+        <div id="scoreboard" class="grid grid-cols-2 md:grid-cols-3 gap-2 bg-slate-800 rounded-2xl p-3 shadow-xl border border-slate-700 relative overflow-hidden">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Current Turn & Room Info -->
+        <div class="flex justify-between items-center px-2">
+            <span id="turn-text" class="text-sm font-bold tracking-wide transition-colors duration-300">Loading...</span>
+            <span class="text-xs font-bold text-slate-500 tracking-wider">ROOM: <span id="game-room-id" class="text-slate-300"></span></span>
+        </div>
+
+        <div class="relative w-full aspect-square bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border-4 border-slate-700/50">
+            <!-- The Game Canvas -->
+            <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+            
+            <!-- Game Over Overlay -->
+            <div id="game-over-overlay" class="absolute inset-0 bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-500 z-50">
+                <h2 id="winner-text" class="text-4xl font-black mb-2 text-white drop-shadow-lg scale-90 transition-transform duration-500 delay-100 text-center px-4"></h2>
+                <p id="final-score-text" class="text-slate-300 mb-8 font-medium text-center px-4 text-sm leading-relaxed max-w-[80%]"></p>
+                <div class="flex gap-3">
+                    <button onclick="leaveRoom()" class="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95">Main Menu</button>
+                    <!-- Only host can replay -->
+                    <button id="replay-btn" onclick="resetGame()" class="hidden px-6 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-white shadow-lg transition-all active:scale-95">Play Again</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Immersive Env Variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'dots-boxes-multi';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // Provide dummy config strictly to prevent crash if run outside immersive, 
+            // though it won't connect without valid credentials.
+            projectId: "dummy-project",
+            apiKey: "dummy-key"
+        };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let auth, db, userId;
+        let unsubscribeRoom = null;
+
+        // Player Styles Configuration
+        const playerStyles = {
+            1: { text: 'text-cyan-400', hex: '#06b6d4', fill: 'rgba(6, 182, 212, 0.25)', bg: 'bg-cyan-500' },
+            2: { text: 'text-rose-400', hex: '#f43f5e', fill: 'rgba(244, 63, 94, 0.25)', bg: 'bg-rose-500' },
+            3: { text: 'text-emerald-400', hex: '#34d399', fill: 'rgba(52, 211, 153, 0.25)', bg: 'bg-emerald-500' },
+            4: { text: 'text-amber-400', hex: '#fbbf24', fill: 'rgba(251, 191, 36, 0.25)', bg: 'bg-amber-500' },
+            5: { text: 'text-purple-400', hex: '#c084fc', fill: 'rgba(192, 132, 252, 0.25)', bg: 'bg-purple-500' },
+            6: { text: 'text-orange-400', hex: '#fb923c', fill: 'rgba(251, 146, 60, 0.25)', bg: 'bg-orange-500' }
+        };
+
+        const config = {
+            paddingRatio: 0.1,
+            colors: {
+                dot: '#64748b',
+                lineEmpty: '#334155',
+                lineHover: 'rgba(248, 250, 252, 0.4)'
+            }
+        };
+
+        // Local State vs Remote State
+        let localState = {
+            roomId: null,
+            playerIndex: -1, // 1 to 6
+            name: '',
+            isHost: false,
+            hoverLine: null,
+            layout: { dpr: 1, size: 0, cellSize: 0, offsetX: 0, offsetY: 0, dotRadius: 0, lineWidth: 0 }
+        };
+
+        let remoteState = null; // Will mirror the Firestore document
+
+        window.showScreen = (screenId) => {
+            const screens = ['loading-screen', 'main-menu', 'create-game-menu', 'join-game-menu', 'lobby-menu', 'game-container'];
+            screens.forEach(id => {
+                const el = document.getElementById(id);
+                if (id === screenId) {
+                    el.classList.remove('opacity-0', 'pointer-events-none', 'absolute');
+                    if(id !== 'loading-screen' && id !== 'game-container') el.classList.add('flex');
+                } else {
+                    el.classList.add('opacity-0', 'pointer-events-none');
+                    if(id !== 'loading-screen' && id !== 'game-container') {
+                        setTimeout(() => el.classList.remove('flex'), 500); // Wait for fade out
+                    }
+                }
+            });
+            
+            // Re-render canvas if showing game
+            if (screenId === 'game-container') {
+                setTimeout(resizeCanvas, 50);
+            }
+        };
+
+        window.showAlert = (title, message) => {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-message').innerText = message;
+            const modal = document.getElementById('alert-modal');
+            const box = document.getElementById('alert-box');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            box.classList.remove('scale-95');
+        };
+
+        window.closeAlert = () => {
+            const modal = document.getElementById('alert-modal');
+            const box = document.getElementById('alert-box');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            box.classList.add('scale-95');
+        };
+
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // removed confusing chars
+            let result = '';
+            for (let i = 0; i < 6; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+            return result;
+        }
+
+        window.copyRoomCode = () => {
+            if (localState.roomId) {
+                const tempInput = document.createElement("input");
+                tempInput.value = localState.roomId;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand("copy");
+                document.body.removeChild(tempInput);
+                
+                // Mini toast inside the button or simple alert
+                const btn = document.querySelector('[title="Copy Room Code"]');
+                const origHtml = btn.innerHTML;
+                btn.innerHTML = `<span class="text-xs font-bold text-white">Copied!</span>`;
+                setTimeout(() => btn.innerHTML = origHtml, 1500);
+            }
+        };
+
+        async function initialize() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                userId = auth.currentUser.uid;
+                
+                // Retrieve saved name if any
+                const savedName = localStorage.getItem('dotsBoxesName');
+                if (savedName) document.getElementById('local-player-name').value = savedName;
+                else document.getElementById('local-player-name').value = 'Player ' + Math.floor(Math.random()*1000);
+
+                showScreen('main-menu');
+            } catch (error) {
+                console.error("Auth Error:", error);
+                document.querySelector('#loading-screen p').innerText = "Connection Failed.";
+            }
+        }
+
+        // Since Firestore has a 1MB limit and struggles with multidimensional arrays,
+        // we serialize the grid arrays to JSON strings.
+        function createInitialGameState(size, maxPlayers) {
+            let hLines = []; for(let i=0; i<=size; i++) hLines.push(new Array(size).fill(0));
+            let vLines = []; for(let i=0; i<size; i++) vLines.push(new Array(size+1).fill(0));
+            let boxes = []; for(let i=0; i<size; i++) boxes.push(new Array(size).fill(0));
+            
+            let scores = {}; for(let i=1; i<=maxPlayers; i++) scores[i] = 0;
+
+            return {
+                hLines: JSON.stringify(hLines),
+                vLines: JSON.stringify(vLines),
+                boxes: JSON.stringify(boxes),
+                scores: scores,
+                currentPlayer: 1,
+                gameOver: false,
+                lastMoveBy: null, // Track who made the last move to show turn popup correctly
+            };
+        }
+
+        window.createRoom = async () => {
+            if (!userId) return;
+            const name = document.getElementById('local-player-name').value.trim() || 'Host';
+            localStorage.setItem('dotsBoxesName', name);
+            localState.name = name;
+            localState.isHost = true;
+
+            const size = parseInt(document.getElementById('create-grid-size').value);
+            const maxPlayers = parseInt(document.getElementById('create-max-players').value);
+            const roomId = generateRoomCode();
+            
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            
+            const roomData = {
+                host: userId,
+                size: size,
+                maxPlayers: maxPlayers,
+                status: 'lobby', // 'lobby', 'playing', 'finished'
+                players: [{ uid: userId, name: name }],
+                gameState: createInitialGameState(size, maxPlayers),
+                createdAt: new Date().toISOString()
+            };
+
+            try {
+                await setDoc(roomRef, roomData);
+                joinLocalRoom(roomId, 1); // Host is always Player 1
+            } catch (err) {
+                console.error(err);
+                showAlert("Error", "Failed to create room.");
+            }
+        };
+
+        window.joinRoom = async () => {
+            if (!userId) return;
+            const btn = document.getElementById('join-btn');
+            const codeInput = document.getElementById('join-room-code');
+            const roomId = codeInput.value.trim().toUpperCase();
+            
+            if (roomId.length !== 6) {
+                showAlert("Invalid Code", "Room code must be 6 characters.");
+                return;
+            }
+
+            const name = document.getElementById('local-player-name').value.trim() || 'Player';
+            localStorage.setItem('dotsBoxesName', name);
+            localState.name = name;
+            localState.isHost = false;
+
+            btn.innerText = "Joining...";
+            btn.disabled = true;
+
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+                const roomSnap = await getDoc(roomRef);
+
+                if (!roomSnap.exists()) {
+                    showAlert("Not Found", "Room does not exist.");
+                    btn.innerText = "Join Room"; btn.disabled = false;
+                    return;
+                }
+
+                const data = roomSnap.data();
+                
+                // Check if already in room
+                const existingIndex = data.players.findIndex(p => p.uid === userId);
+                if (existingIndex !== -1) {
+                     // Rejoin
+                     joinLocalRoom(roomId, existingIndex + 1);
+                     return;
+                }
+
+                if (data.status !== 'lobby') {
+                    showAlert("Too Late", "Game has already started.");
+                    btn.innerText = "Join Room"; btn.disabled = false;
+                    return;
+                }
+
+                if (data.players.length >= data.maxPlayers) {
+                    showAlert("Room Full", "This room has reached max players.");
+                    btn.innerText = "Join Room"; btn.disabled = false;
+                    return;
+                }
+
+                // Add to players array
+                const newPlayers = [...data.players, { uid: userId, name: name }];
+                await updateDoc(roomRef, { players: newPlayers });
+                
+                joinLocalRoom(roomId, newPlayers.length);
+
+            } catch (err) {
+                console.error(err);
+                showAlert("Error", "Failed to join room.");
+                btn.innerText = "Join Room"; btn.disabled = false;
+            }
+        };
+
+        function joinLocalRoom(roomId, playerIndex) {
+            localState.roomId = roomId;
+            localState.playerIndex = playerIndex;
+            
+            document.getElementById('lobby-room-code').innerText = roomId;
+            document.getElementById('game-room-id').innerText = roomId;
+
+            // Start listening to the room
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            
+            if (unsubscribeRoom) unsubscribeRoom();
+            
+            unsubscribeRoom = onSnapshot(roomRef, (docSnap) => {
+                if (!docSnap.exists()) {
+                    showAlert("Room Closed", "The host closed the room.");
+                    window.leaveRoom();
+                    return;
+                }
+                
+                const prevRemoteState = remoteState;
+                remoteState = docSnap.data();
+                
+                // Parse the stringified game state arrays
+                remoteState.parsedState = {
+                    hLines: JSON.parse(remoteState.gameState.hLines),
+                    vLines: JSON.parse(remoteState.gameState.vLines),
+                    boxes: JSON.parse(remoteState.gameState.boxes)
+                };
+
+                // Update UI based on current status
+                if (remoteState.status === 'lobby') {
+                    updateLobbyUI();
+                    showScreen('lobby-menu');
+                } else if (remoteState.status === 'playing' || remoteState.status === 'finished') {
+                    
+                    // If transitioning to playing, do setup
+                    if (!prevRemoteState || prevRemoteState.status === 'lobby') {
+                        setupGameUI();
+                        showScreen('game-container');
+                        triggerTurnPopup();
+                    }
+                    
+                    // Re-render Game
+                    updateGameUI();
+                    draw();
+                    
+                    // Check for turn change to show popup
+                    if (prevRemoteState && 
+                        prevRemoteState.gameState.currentPlayer !== remoteState.gameState.currentPlayer &&
+                        !remoteState.gameState.gameOver) {
+                        triggerTurnPopup();
+                    }
+
+                    if (remoteState.status === 'finished') {
+                        showGameOverUI();
+                    } else {
+                        document.getElementById('game-over-overlay').classList.add('opacity-0', 'pointer-events-none');
+                    }
+                }
+            }, (err) => {
+                console.error("Snapshot error:", err);
+                showAlert("Error", "Lost connection to game.");
+            });
+        }
+
+        window.leaveRoom = () => {
+            if (unsubscribeRoom) {
+                unsubscribeRoom();
+                unsubscribeRoom = null;
+            }
+            // Ideally we'd remove ourselves from the DB array if in lobby, but to keep it simple and robust, 
+            // we just disconnect locally. Next player logic will just skip them if they timeout (complex), 
+            // or we just let it be for this simple version.
+            localState.roomId = null;
+            showScreen('main-menu');
+        };
+
+        function updateLobbyUI() {
+            if (!remoteState) return;
+            
+            document.getElementById('lobby-player-count').innerText = `${remoteState.players.length}/${remoteState.maxPlayers}`;
+            
+            const listEl = document.getElementById('lobby-players-list');
+            listEl.innerHTML = '';
+            
+            remoteState.players.forEach((p, idx) => {
+                const pNum = idx + 1;
+                const style = playerStyles[pNum];
+                const isMe = p.uid === userId;
+                
+                listEl.innerHTML += `
+                    <div class="flex items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-slate-900 ${style.bg}">${pNum}</div>
+                        <span class="font-bold text-white flex-1">${p.name} ${isMe ? '<span class="text-slate-500 text-xs">(You)</span>' : ''}</span>
+                        ${idx === 0 ? '<span class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">HOST</span>' : ''}
+                    </div>
+                `;
+            });
+
+            // Re-evaluate Host Status securely
+            localState.isHost = (remoteState.host === userId);
+
+            const hostControls = document.getElementById('lobby-host-controls');
+            const guestMsg = document.getElementById('lobby-guest-message');
+            
+            if (localState.isHost) {
+                hostControls.classList.remove('hidden');
+                hostControls.classList.add('flex');
+                guestMsg.classList.add('hidden');
+            } else {
+                hostControls.classList.add('hidden');
+                hostControls.classList.remove('flex');
+                guestMsg.classList.remove('hidden');
+            }
+        }
+
+        window.startGame = async () => {
+            if (!localState.isHost || !localState.roomId) return;
+            
+            // Allow starting even if not full, just adjust maxPlayers to current length so turns wrap correctly
+            const actualPlayers = remoteState.players.length;
+            if(actualPlayers < 2) {
+                showAlert("Need Players", "At least 2 players are required to start.");
+                return;
+            }
+
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', localState.roomId);
+            try {
+                await updateDoc(roomRef, { 
+                    status: 'playing',
+                    maxPlayers: actualPlayers // Adjust max so turns loop correctly if started early
+                });
+            } catch (err) {
+                console.error(err);
+                showAlert("Error", "Could not start game.");
+            }
+        };
+
+        window.resetGame = async () => {
+            if (!localState.isHost || !localState.roomId) return;
+            
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', localState.roomId);
+            try {
+                await updateDoc(roomRef, { 
+                    status: 'playing',
+                    gameState: createInitialGameState(remoteState.size, remoteState.maxPlayers)
+                });
+            } catch (err) {
+                console.error(err);
+                showAlert("Error", "Could not restart game.");
+            }
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let turnPopupTimeout = null;
+
+        function triggerTurnPopup() {
+            if (!remoteState || remoteState.status !== 'playing') return;
+            
+            const cpIdx = remoteState.gameState.currentPlayer - 1;
+            const pData = remoteState.players[cpIdx];
+            if(!pData) return;
+
+            const name = pData.name;
+            const isMe = (remoteState.gameState.currentPlayer === localState.playerIndex);
+            
+            const turnPopup = document.getElementById('turn-popup');
+            const turnPopupText = document.getElementById('turn-popup-text');
+
+            turnPopupText.innerText = isMe ? "Your Turn!" : `${name}'s Turn`;
+            turnPopupText.className = `text-3xl font-black uppercase tracking-widest drop-shadow-md text-center ${playerStyles[remoteState.gameState.currentPlayer].text}`;
+            
+            turnPopup.classList.remove('opacity-0', 'scale-90');
+            turnPopup.classList.add('opacity-100', 'scale-100');
+            
+            if (turnPopupTimeout) clearTimeout(turnPopupTimeout);
+            turnPopupTimeout = setTimeout(() => {
+                turnPopup.classList.remove('opacity-100', 'scale-100');
+                turnPopup.classList.add('opacity-0', 'scale-90');
+            }, 1500);
+        }
+
+        function setupGameUI() {
+            const scoreboard = document.getElementById('scoreboard');
+            scoreboard.innerHTML = '';
+            
+            remoteState.players.forEach((p, idx) => {
+                const pNum = idx + 1;
+                scoreboard.innerHTML += `
+                    <div id="p${pNum}-card" class="flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-300">
+                        <span class="${playerStyles[pNum].text} font-bold uppercase tracking-wider text-[10px] sm:text-xs mb-1 truncate w-full text-center" title="${p.name}">${p.name}</span>
+                        <span id="p${pNum}-score" class="text-3xl font-black text-white">0</span>
+                    </div>
+                `;
+            });
+            
+            if(localState.isHost) {
+                document.getElementById('replay-btn').classList.remove('hidden');
+            }
+        }
+
+        function updateGameUI() {
+            const scores = remoteState.gameState.scores;
+            const currentPlayer = remoteState.gameState.currentPlayer;
+
+            remoteState.players.forEach((p, idx) => {
+                const pNum = idx + 1;
+                const scoreEl = document.getElementById(`p${pNum}-score`);
+                const cardEl = document.getElementById(`p${pNum}-card`);
+                
+                if (scoreEl) scoreEl.innerText = scores[pNum] || 0;
+                
+                if (cardEl) {
+                    if (pNum === currentPlayer) {
+                        cardEl.classList.remove('opacity-50', 'scale-95');
+                        cardEl.classList.add('bg-slate-700/50');
+                    } else {
+                        cardEl.classList.add('opacity-50', 'scale-95');
+                        cardEl.classList.remove('bg-slate-700/50');
+                    }
+                }
+            });
+
+            const pData = remoteState.players[currentPlayer - 1];
+            if (pData) {
+                const turnText = document.getElementById('turn-text');
+                const isMe = (currentPlayer === localState.playerIndex);
+                turnText.innerText = isMe ? "Your Turn" : `${pData.name}'s Turn`;
+                turnText.className = `text-sm font-bold tracking-wide transition-colors duration-300 ${playerStyles[currentPlayer].text}`;
+            }
+        }
+
+        function showGameOverUI() {
+            const overlay = document.getElementById('game-over-overlay');
+            const winnerText = document.getElementById('winner-text');
+            const finalScoreText = document.getElementById('final-score-text');
+            
+            let maxScore = -1;
+            let winners = [];
+            const scores = remoteState.gameState.scores;
+            
+            for(let i = 1; i <= remoteState.maxPlayers; i++) {
+                if (scores[i] > maxScore) {
+                    maxScore = scores[i];
+                    winners = [i];
+                } else if (scores[i] === maxScore) {
+                    winners.push(i);
+                }
+            }
+            
+            if (winners.length === 1) {
+                const wId = winners[0];
+                const wName = remoteState.players[wId-1].name;
+                winnerText.innerText = (wId === localState.playerIndex) ? "You Win!" : `${wName} Wins!`;
+                winnerText.className = `text-4xl font-black mb-2 drop-shadow-lg scale-100 transition-transform duration-500 delay-100 text-center ${playerStyles[wId].text}`;
+            } else {
+                winnerText.innerText = "It's a Tie!";
+                winnerText.className = "text-4xl font-black mb-2 drop-shadow-lg scale-100 transition-transform duration-500 delay-100 text-slate-100 text-center";
+            }
+            
+            const scoresText = remoteState.players
+                .map((p, idx) => `<span class="${playerStyles[idx+1].text}">${p.name}: ${scores[idx+1]}</span>`)
+                .join(' &nbsp;|&nbsp; ');
+                
+            finalScoreText.innerHTML = scoresText;
+            overlay.classList.remove('pointer-events-none', 'opacity-0');
+        }
+
+        function resizeCanvas() {
+            if (!remoteState) return;
+            const container = canvas.parentElement;
+            if(!container) return;
+            
+            const rect = container.getBoundingClientRect();
+            // Prevent size expanding infinitely due to internal borders by taking min of w/h
+            const size = Math.min(rect.width, rect.height) || 300; 
+            
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = size * dpr;
+            canvas.height = size * dpr;
+            ctx.scale(dpr, dpr);
+            
+            const layout = localState.layout;
+            layout.dpr = dpr;
+            layout.size = size;
+            
+            const gridCells = remoteState.size;
+            const usableSize = size * (1 - config.paddingRatio * 2);
+            layout.cellSize = usableSize / gridCells;
+            
+            const gridWidth = gridCells * layout.cellSize;
+            layout.offsetX = (size - gridWidth) / 2;
+            layout.offsetY = (size - gridWidth) / 2; // Square grid
+            
+            layout.dotRadius = Math.max(3, layout.cellSize * 0.08);
+            layout.lineWidth = Math.max(4, layout.cellSize * 0.12);
+            
+            draw();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function draw() {
+            if (!remoteState || !remoteState.parsedState) return;
+            
+            const l = localState.layout;
+            if (l.size === 0) resizeCanvas();
+            
+            const s = remoteState.size;
+            const pState = remoteState.parsedState;
+
+            ctx.clearRect(0, 0, l.size, l.size);
+            
+            // 1. Boxes
+            for (let r = 0; r < s; r++) {
+                for (let col = 0; col < s; col++) {
+                    const owner = pState.boxes[r][col];
+                    if (owner > 0) {
+                        ctx.fillStyle = playerStyles[owner].fill;
+                        const padding = l.lineWidth / 2;
+                        ctx.fillRect(
+                            l.offsetX + col * l.cellSize + padding, 
+                            l.offsetY + r * l.cellSize + padding, 
+                            l.cellSize - padding*2, 
+                            l.cellSize - padding*2
+                        );
+                        
+                        ctx.fillStyle = playerStyles[owner].hex;
+                        ctx.globalAlpha = 0.5;
+                        ctx.font = `bold ${l.cellSize * 0.4}px Inter`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(`P${owner}`, 
+                            l.offsetX + (col + 0.5) * l.cellSize, 
+                            l.offsetY + (r + 0.5) * l.cellSize
+                        );
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+            }
+
+            // 2. Empty Lines
+            ctx.strokeStyle = config.colors.lineEmpty;
+            ctx.lineWidth = l.lineWidth;
+            ctx.lineCap = 'round';
+            
+            ctx.beginPath();
+            for (let r = 0; r <= s; r++) {
+                for (let col = 0; col < s; col++) {
+                    if (pState.hLines[r][col] === 0) {
+                        ctx.moveTo(l.offsetX + col * l.cellSize, l.offsetY + r * l.cellSize);
+                        ctx.lineTo(l.offsetX + (col + 1) * l.cellSize, l.offsetY + r * l.cellSize);
+                    }
+                }
+            }
+            for (let r = 0; r < s; r++) {
+                for (let col = 0; col <= s; col++) {
+                    if (pState.vLines[r][col] === 0) {
+                        ctx.moveTo(l.offsetX + col * l.cellSize, l.offsetY + r * l.cellSize);
+                        ctx.lineTo(l.offsetX + col * l.cellSize, l.offsetY + (r + 1) * l.cellSize);
+                    }
+                }
+            }
+            ctx.stroke();
+
+            // 3. Hover Line (Local only, if it's my turn)
+            if (localState.hoverLine && remoteState.gameState.currentPlayer === localState.playerIndex && !remoteState.gameState.gameOver) {
+                const { type, r, col } = localState.hoverLine;
+                const isEmpty = type === 'h' ? pState.hLines[r][col] === 0 : pState.vLines[r][col] === 0;
+                
+                if (isEmpty) {
+                    ctx.strokeStyle = config.colors.lineHover;
+                    ctx.lineWidth = l.lineWidth * 1.2;
+                    ctx.beginPath();
+                    if (type === 'h') {
+                        ctx.moveTo(l.offsetX + col * l.cellSize, l.offsetY + r * l.cellSize);
+                        ctx.lineTo(l.offsetX + (col + 1) * l.cellSize, l.offsetY + r * l.cellSize);
+                    } else {
+                        ctx.moveTo(l.offsetX + col * l.cellSize, l.offsetY + r * l.cellSize);
+                        ctx.lineTo(l.offsetX + col * l.cellSize, l.offsetY + (r + 1) * l.cellSize);
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            // 4. Claimed Lines
+            const drawLines = (linesData, isHoriz, playerNum, color) => {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = l.lineWidth;
+                ctx.beginPath();
+                for (let r = 0; r < linesData.length; r++) {
+                    for (let col = 0; col < linesData[r].length; col++) {
+                        if (linesData[r][col] === playerNum) {
+                            if (isHoriz) {
+                                ctx.moveTo(l.offsetX + col * l.cellSize, l.offsetY + r * l.cellSize);
+                                ctx.lineTo(l.offsetX + (col + 1) * l.cellSize, l.offsetY + r * l.cellSize);
+                            } else {
+                                ctx.moveTo(l.offsetX + col * l.cellSize, l.offsetY + r * l.cellSize);
+                                ctx.lineTo(l.offsetX + col * l.cellSize, l.offsetY + (r + 1) * l.cellSize);
+                            }
+                        }
+                    }
+                }
+                ctx.stroke();
+            };
+
+            for (let p = 1; p <= remoteState.maxPlayers; p++) {
+                drawLines(pState.hLines, true, p, playerStyles[p].hex);
+                drawLines(pState.vLines, false, p, playerStyles[p].hex);
+            }
+
+            // 5. Dots
+            ctx.fillStyle = config.colors.dot;
+            for (let r = 0; r <= s; r++) {
+                for (let col = 0; col <= s; col++) {
+                    ctx.beginPath();
+                    ctx.arc(
+                        l.offsetX + col * l.cellSize, 
+                        l.offsetY + r * l.cellSize, 
+                        l.dotRadius, 0, Math.PI * 2
+                    );
+                    ctx.fill();
+                }
+            }
+        }
+
+        function getPointerPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            let cx = e.clientX, cy = e.clientY;
+            if (e.touches && e.touches.length > 0) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; } 
+            else if (e.changedTouches && e.changedTouches.length > 0) { cx = e.changedTouches[0].clientX; cy = e.changedTouches[0].clientY; }
+            return { x: cx - rect.left, y: cy - rect.top };
+        }
+
+        function getLineAt(x, y) {
+            const l = localState.layout;
+            const s = remoteState.size;
+            let closest = null;
+            // Dynamic hit tolerance, scales down for big grids to prevent overlap
+            let maxHitDist = Math.min(20, l.cellSize * 0.35); 
+            let bestDist = maxHitDist;
+
+            // Horizontal
+            for (let r = 0; r <= s; r++) {
+                for (let col = 0; col < s; col++) {
+                    let x1 = l.offsetX + col * l.cellSize;
+                    let x2 = l.offsetX + (col + 1) * l.cellSize;
+                    let y1 = l.offsetY + r * l.cellSize;
+                    let padding = l.cellSize * 0.15;
+                    if (x >= (x1 - padding) && x <= (x2 + padding)) {
+                        let dist = Math.abs(y - y1);
+                        if (dist < bestDist) { bestDist = dist; closest = { type: 'h', r, col }; }
+                    }
+                }
+            }
+
+            // Vertical
+            for (let r = 0; r < s; r++) {
+                for (let col = 0; col <= s; col++) {
+                    let x1 = l.offsetX + col * l.cellSize;
+                    let y1 = l.offsetY + r * l.cellSize;
+                    let y2 = l.offsetY + (r + 1) * l.cellSize;
+                    let padding = l.cellSize * 0.15;
+                    if (y >= (y1 - padding) && y <= (y2 + padding)) {
+                        let dist = Math.abs(x - x1);
+                        if (dist < bestDist) { bestDist = dist; closest = { type: 'v', r, col }; }
+                    }
+                }
+            }
+            return closest;
+        }
+
+        function handleMove(e) {
+            if (!remoteState || remoteState.status !== 'playing' || remoteState.gameState.gameOver) return;
+            if (remoteState.gameState.currentPlayer !== localState.playerIndex) return; // Not my turn
+            
+            if (e.type === 'touchmove') e.preventDefault();
+
+            const pos = getPointerPos(e);
+            const line = getLineAt(pos.x, pos.y);
+            
+            const prevStr = localState.hoverLine ? `${localState.hoverLine.type}-${localState.hoverLine.r}-${localState.hoverLine.col}` : null;
+            const newStr = line ? `${line.type}-${line.r}-${line.col}` : null;
+
+            if (prevStr !== newStr) {
+                localState.hoverLine = line;
+                draw();
+            }
+        }
+
+        function handlePointerLeave() {
+            if (localState.hoverLine) {
+                localState.hoverLine = null;
+                draw();
+            }
+        }
+
+        async function handleClick(e) {
+            if (!remoteState || remoteState.status !== 'playing' || remoteState.gameState.gameOver) return;
+            
+            // STRICT TURN CHECK
+            if (remoteState.gameState.currentPlayer !== localState.playerIndex) {
+                // Not your turn, ignore click
+                return;
+            }
+
+            const pos = getPointerPos(e);
+            const line = getLineAt(pos.x, pos.y);
+            if (!line) return;
+
+            const { type, r, col } = line;
+            const pState = remoteState.parsedState;
+            
+            // Check if already taken
+            if (type === 'h' && pState.hLines[r][col] !== 0) return;
+            if (type === 'v' && pState.vLines[r][col] !== 0) return;
+
+            // Optimistically update local parsed state to calculate results
+            if (type === 'h') pState.hLines[r][col] = localState.playerIndex;
+            else pState.vLines[r][col] = localState.playerIndex;
+
+            // Check Boxes
+            let boxesCompleted = 0;
+            const p = localState.playerIndex;
+            const isBoxComplete = (br, bc) => (pState.hLines[br][bc] !== 0 && pState.hLines[br+1][bc] !== 0 && pState.vLines[br][bc] !== 0 && pState.vLines[br][bc+1] !== 0);
+
+            if (type === 'h') {
+                if (r > 0 && isBoxComplete(r - 1, col) && pState.boxes[r - 1][col] === 0) { pState.boxes[r - 1][col] = p; boxesCompleted++; }
+                if (r < remoteState.size && isBoxComplete(r, col) && pState.boxes[r][col] === 0) { pState.boxes[r][col] = p; boxesCompleted++; }
+            } else {
+                if (col > 0 && isBoxComplete(r, col - 1) && pState.boxes[r][col - 1] === 0) { pState.boxes[r][col - 1] = p; boxesCompleted++; }
+                if (col < remoteState.size && isBoxComplete(r, col) && pState.boxes[r][col] === 0) { pState.boxes[r][col] = p; boxesCompleted++; }
+            }
+
+            // Build new remote state object to send to Firestore
+            const newGameState = {
+                hLines: JSON.stringify(pState.hLines),
+                vLines: JSON.stringify(pState.vLines),
+                boxes: JSON.stringify(pState.boxes),
+                scores: { ...remoteState.gameState.scores },
+                currentPlayer: remoteState.gameState.currentPlayer,
+                gameOver: remoteState.gameState.gameOver,
+                lastMoveBy: localState.playerIndex
+            };
+
+            let isGameEnding = false;
+
+            if (boxesCompleted > 0) {
+                newGameState.scores[p] += boxesCompleted;
+                
+                let totalScore = Object.values(newGameState.scores).reduce((a,b)=>a+b, 0);
+                if (totalScore === remoteState.size * remoteState.size) {
+                    newGameState.gameOver = true;
+                    isGameEnding = true;
+                }
+                // Keeps turn
+            } else {
+                // Next player
+                newGameState.currentPlayer = (newGameState.currentPlayer % remoteState.maxPlayers) + 1;
+            }
+
+            if (e.type === 'touchend') localState.hoverLine = null;
+
+            // Send to Firestore
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', localState.roomId);
+                const updates = { gameState: newGameState };
+                if (isGameEnding) updates.status = 'finished';
+                
+                await updateDoc(roomRef, updates);
+            } catch(err) {
+                console.error("Failed to make move:", err);
+                showAlert("Sync Error", "Failed to send move to server.");
+            }
+        }
+
+        canvas.addEventListener('mousemove', handleMove);
+        canvas.addEventListener('mouseleave', handlePointerLeave);
+        canvas.addEventListener('click', handleClick);
+        canvas.addEventListener('touchstart', handleMove, { passive: false });
+        canvas.addEventListener('touchmove', handleMove, { passive: false });
+        canvas.addEventListener('touchend', (e) => { e.preventDefault(); handleClick(e); });
+
+        // Kickoff
+        initialize();
+
+    </script>
+</body>
+</html>
